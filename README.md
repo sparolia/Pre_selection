@@ -9,4 +9,4 @@ For change in mutation values, fitness function- refer ga.py
 For change in initial parameter values and loops -refer pre_selection.py
 
 
-Run command: python pre_selection #values_in_pop #generations
+Run command: python pre_selection #values_in_pop #generations #runs
