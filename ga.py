@@ -5,41 +5,64 @@ import ROOT
 import random
 
 
-def cal_pop_fitness(var, pop, tree_sig, tree_bkg,param_abs):
+def cal_pop_fitness(var, pop, tree_sig, tree_bkg, param_abs):
+    #ROOT.ROOT.EnableImplicitMT() 
     # Calculating the fitness value of each solution in the current population.
     # The fitness function calulates the sum of products between each input and its corresponding weight.
-    #fitness = numpy.sum(pop*equation_inputs, axis=1)
+    
     fitness = numpy.empty(len(pop))
-
-    k_Err = ['abs(k_dxy/k_dxyErr)','abs(k_dz/k_dzErr)']
-    #Filename_sig = sys.argv[1]
-    #Filename_bkg = sys.argv[2]    
-
+    tot_tau = (tree_sig.Filter ("is_signal_channel > 0.5").Count()).GetValue()
+    tot_muon = (tree_sig.Filter ("is_signal_channel < 0.5").Count()).GetValue()
     for j in range(len(pop)):
-        sig = 0
-        bkg = 0 
+        #sig = 0
+        #bkg = 0
+        #F1 = 0.0
+        #F2 = 0.0
         entries_sig = tree_sig.Filter('%s > %s'%(var[0],pop[j,0]))
         entries_bkg = tree_bkg.Filter('%s > %s'%(var[0],pop[j,0]))
-        for i in range(1,len(var)-param_abs):
+        for i in range(1,len(var)-(param_abs+1)):
             entries_sig = entries_sig.Filter('%s > %s'%(var[i],pop[j,i]))
             entries_bkg = entries_bkg.Filter('%s > %s'%(var[i],pop[j,i]))
+        #print (i)
         for k in range(param_abs):
-            entries_sig = entries_sig.Filter('%s < %s'%(k_Err[k],pop[j,k+i+1]))
-            entries_bkg = entries_bkg.Filter('%s < %s'%(k_Err[k],pop[j,k+i+1]))
-        sig_ent = entries_sig.Count();
-        bkg_ent = entries_bkg.Count();
-        sig = sig_ent.GetValue()
-        bkg = bkg_ent.GetValue()
-        if(bkg>0):
-            fitness[j] = numpy.round((sig/(math.sqrt(bkg))),2)
-            #fitness[j] = numpy.round((sig/(math.sqrt(bkg+sig))),2)
-            #fitness[j] = numpy.round((2*((math.sqrt(bkg+sig))-(math.sqrt(bkg)))),2)
-            #fitness[j] = numpy.round((math.sqrt((2*(sig+bkg))*(math.log(1+(sig+bkg)))-(2*sig))),2)
-            #fitness[j] = numpy.round((sig/bkg),2)
+            entries_sig = entries_sig.Filter('%s < %s'%(var[k+i+1],pop[j,k+i+1]))
+            entries_bkg = entries_bkg.Filter('%s < %s'%(var[k+i+1],pop[j,k+i+1]))
+        #print (k)
+        entries_sig = entries_sig.Filter('(%s > %s) and (%s < %s)'%(var[k+i+2],pop[j,k+i+2],var[k+i+2],pop[j,k+i+3]))
+        entries_bkg = entries_bkg.Filter('(%s > %s) and (%s < %s)'%(var[k+i+2],pop[j,k+i+2],var[k+i+2],pop[j,k+i+3]))
+
+        cut_tau = (entries_sig.Filter ("is_signal_channel > 0.5").Count()).GetValue()
+        cut_muon = (entries_sig.Filter ("is_signal_channel < 0.5").Count()).GetValue()
+      
+        #sig_evnt = entries_sig.Filter("is_signal_channel > 0.5")
+        bkg_evnt_1 = entries_bkg.Filter("norm_weight < 1")
+        bkg_evnt_2 = entries_bkg.Filter("norm_weight > 1 and norm_weight < 8")
+        bkg_evnt_3 = entries_bkg.Filter("norm_weight > 8")
+        
+        sig_weight = round((entries_sig.Mean("norm_weight").GetValue()),3)
+        bkg_weight_1 = round((bkg_evnt_1.Mean("norm_weight").GetValue()),3)
+        bkg_weight_2 = round((bkg_evnt_2.Mean("norm_weight").GetValue()),3)
+        bkg_weight_3 = round((bkg_evnt_3.Mean("norm_weight").GetValue()),3)
+
+        sig = sig_weight*(entries_sig.Count().GetValue())
+        #bkg = (entries_bkg.Count()).GetValue()
+        bkg1 = bkg_weight_1*((bkg_evnt_1.Count()).GetValue())
+        bkg2 = bkg_weight_2*((bkg_evnt_2.Count()).GetValue())
+        bkg3 = bkg_weight_3*((bkg_evnt_3.Count()).GetValue())
+        bkg = bkg1 + bkg2 + bkg3       
+    
+        tau = sig_weight*cut_tau
+
+        eff_tau = cut_tau/tot_tau
+        eff_muon = cut_muon/tot_muon
+        lam = [0.25, 0.50, 0.75]
+
+        if(bkg>0 and eff_muon >0):
+            F1 = (tau/(math.sqrt(bkg)))                                                                    
+            F2 = abs( 1-(eff_tau/eff_muon))
+            fitness[j] = round(((F1*lam[2])+ ((1-lam[2])/F2)),3)
         else:
-            fitness[j] = 0
-            
-        #print (sig)
+            fitness[j] = -1
         
     return fitness
 
@@ -47,101 +70,75 @@ def cal_pop_fitness(var, pop, tree_sig, tree_bkg,param_abs):
 def cal_pop_fitness_final(var, pop, tree_sig, tree_bkg,param_abs):
     # Calculating the fitness value of each solution in the current population.
     # The fitness function calulates the sum of products between each input and its corresponding weight.
-    #fitness = numpy.sum(pop*equation_inputs, axis=1)
-    fitness1 = numpy.empty(len(pop))
-    fitness2 = numpy.empty(len(pop))
-    fitness3 = numpy.empty(len(pop))
-    fitness4 = numpy.empty(len(pop))
-    fitness5 = numpy.empty(len(pop))
-    k_Err = ['abs(k_dxy/k_dxyErr)','abs(k_dz/k_dzErr)']
-    #Filename_sig = sys.argv[1]
-    #Filename_bkg = sys.argv[2]    
+    
+    fitness = numpy.empty(len(pop))
     fom=[]
-    #fom=numpy.empty(5)
+    
+    tot_tau = (tree_sig.Filter ("is_signal_channel > 0.5").Count()).GetValue()
+    tot_muon = (tree_sig.Filter ("is_signal_channel < 0.5").Count()).GetValue()
+
     for j in range(len(pop)):
-        sig = 0
-        bkg = 0 
+        
         entries_sig = tree_sig.Filter('%s > %s'%(var[0],pop[j,0]))
         entries_bkg = tree_bkg.Filter('%s > %s'%(var[0],pop[j,0]))
-        for i in range(1,len(var)-param_abs):
+        for i in range(1,len(var)-(param_abs+1)):
             entries_sig = entries_sig.Filter('%s > %s'%(var[i],pop[j,i]))
             entries_bkg = entries_bkg.Filter('%s > %s'%(var[i],pop[j,i]))
         for k in range(param_abs):
-            entries_sig = entries_sig.Filter('%s < %s'%(k_Err[k],pop[j,k+i+1]))
-            entries_bkg = entries_bkg.Filter('%s < %s'%(k_Err[k],pop[j,k+i+1]))
-        sig_ent = entries_sig.Count();
-        bkg_ent = entries_bkg.Count();
-        sig = sig_ent.GetValue()
-        bkg = bkg_ent.GetValue()
-        if(bkg>0):
-            fitness1[j] = numpy.round((sig/(math.sqrt(bkg))),2)
-            fitness2[j] = numpy.round((sig/(math.sqrt(bkg+sig))),2)
-            fitness3[j] = numpy.round((2*((math.sqrt(bkg+sig))-(math.sqrt(bkg)))),2)
-            fitness4[j] = numpy.round((math.sqrt((2*(sig+bkg))*(math.log(1+(sig+bkg)))-(2*sig))),2)
-            fitness5[j] = numpy.round((sig/bkg),2)
+            entries_sig = entries_sig.Filter('%s < %s'%(var[k+i+1],pop[j,k+i+1]))
+            entries_bkg = entries_bkg.Filter('%s < %s'%(var[k+i+1],pop[j,k+i+1]))
+        entries_sig = entries_sig.Filter('(%s > %s) and (%s < %s)'%(var[k+i+2],pop[j,k+i+2],var[k+i+2],pop[j,k+i+3]))
+        entries_bkg = entries_bkg.Filter('(%s > %s) and (%s < %s)'%(var[k+i+2],pop[j,k+i+2],var[k+i+2],pop[j,k+i+3]))      
+       
+        cut_tau = (entries_sig.Filter ("is_signal_channel > 0.5").Count()).GetValue()
+        cut_muon = (entries_sig.Filter ("is_signal_channel < 0.5").Count()).GetValue()
+
+        #sig_evnt = entries_sig.Filter("is_signal_channel > 0.5")
+        bkg_evnt_1 = entries_bkg.Filter("norm_weight < 1")
+        bkg_evnt_2 = entries_bkg.Filter("norm_weight > 1 and norm_weight < 8")
+        bkg_evnt_3 = entries_bkg.Filter("norm_weight > 8")
+        
+        sig_weight = round((entries_sig.Mean("norm_weight").GetValue()),3)
+        bkg_weight_1 = round((bkg_evnt_1.Mean("norm_weight").GetValue()),3)
+        bkg_weight_2 = round((bkg_evnt_2.Mean("norm_weight").GetValue()),3)
+        bkg_weight_3 = round((bkg_evnt_3.Mean("norm_weight").GetValue()),3)
+
+        sig = sig_weight*(entries_sig.Count().GetValue())
+        #bkg = (entries_bkg.Count()).GetValue()
+        bkg1 = bkg_weight_1*((bkg_evnt_1.Count()).GetValue())
+        bkg2 = bkg_weight_2*((bkg_evnt_2.Count()).GetValue())
+        bkg3 = bkg_weight_3*((bkg_evnt_3.Count()).GetValue())
+        bkg = bkg1 + bkg2 + bkg3 
+        
+        tau = sig_weight*cut_tau
+
+        #sig.append(sig_ent)
+        #bkg.append(bkg_ent)
+        eff_tau = (cut_tau/tot_tau)                                                                    
+        eff_muon = (cut_muon/tot_muon)                                                                 
+        lam = [0.25, 0.50, 0.75] 
+
+        if(bkg > 0 and eff_muon > 0):
+            F1 = tau/(math.sqrt(bkg))                                                     
+            F2 = (abs(1-(eff_tau/eff_muon)))
+            fitness[j] = round(((F1*lam[2])+((1-lam[2])/F2)),3)
         else:
-            fitness1[j] = 0
-            fitness2[j] = 0
-            fitness3[j] = 0
-            fitness4[j] = 0
-            fitness5[j] = 0
+            fitness[j] = -1
         #print (sig)
 
-    best_match_idx = numpy.where(fitness1 == numpy.max(fitness1))
-    #print (best_match_idx[0])
-    #fom('Figure of merits values:' +'\n')
+    #best_match_idx = (numpy.where(fitness == numpy.amax(fitness)))
+    best_match_idx = numpy.argmax(fitness)
+    '''    
+    sig_best = (sig[best_match_idx])
+    bkg_best = (bkg[best_match_idx])
+    F1_best = F1[best_match_idx]
+    F2_best = F2[best_match_idx]
+    eff_tau_best = eff_tau[best_match_idx]
+    eff_muon_best = eff_muon[best_match_idx]
     '''
-    numpy.append(fom,fitness1)
-    numpy.append(fom,fitness2)
-    numpy.append(fom,fitness3)
-    numpy.append(fom,fitness4)
-    numpy.append(fom,fitness5)
-    '''
-    fom.append(fitness1)
-    fom.append(fitness2)
-    fom.append(fitness3)
-    fom.append(fitness4)
-    fom.append(fitness5)
+    solution = (pop[best_match_idx,:])
     
-    fom = numpy.array(fom)
-    #print (fom)
-    fom_best = (fom[:,best_match_idx[0]])
-
-
-#fitness2[best_match_idx],fom,fitness3[best_match_idx],fitness4[best_match_idx],fitness5[best_match_idx]])
-   
-    return fitness1,fom_best
-
-'''
-            if(numpy.all(var_sig_1>pop[j,0:i+1]) and numpy.all(numpy.abs(var_sig_2) < pop[j,i+1:i+p+2])):
-                sig +=1
-
-        for entrybkg in range (0,tree_bkg.GetEntries()):
-            tree_bkg.GetEntry(entrybkg)
-            jpsi_mass=getattr (tree_bkg,"jpsi_mass")
-            if( jpsi_mass < 3.05 or 3.15 < jpsi_mass):
-                var_bkg_1 = []
-                var_bkg_2 = []
-                for k in range(len(equation_inputs)-param_abs):
-                    var_bkg_1.append(getattr (tree_bkg,equation_inputs[k]))
-                for q in range(param_abs):
-                    var_bkg = (getattr (tree_bkg,equation_inputs[k+1+q]))
-                    err_bkg = (getattr (tree_bkg,equation_inputs[k+1+q]+"Err"))
-                    var_bkg_2.append(var_bkg/err_bkg)
-
-                if(numpy.all(var_bkg_1>pop[j,0:k+1]) and numpy.all(numpy.abs(var_bkg_2) < pop[j,k+1:k+q+2])):
-                    bkg +=1
-
-        if(bkg>0):
-            #print (bkg)
-            fitness[j] = sig/(math.sqrt(bkg))
-        else:
-            fitness[j] = 0
-        #print (sig)
-
-    return fitness
-'''
-
+    return fitness, solution#,fom_best
 
 
 def select_mating_pool(pop, fitness, num_parents):
@@ -178,12 +175,19 @@ def mutation(offspring_crossover, num_mutations=1):
         for mutation_num in range(num_mutations):
             # The random value to be added to the gene.
             #random_value = numpy.random.uniform(-1.0, 1.0, 1)
-            gene_idx=numpy.random.randint(0,6)
-            if(gene_idx == 4):
-                random_value = round(random.uniform(-0.05, 0.05),2)
+            gene_idx=numpy.random.randint(0,13)
+            if(gene_idx == 4 or gene_idx == 6):
+                random_value = (random.uniform(-0.005, 0.005))
+            elif(gene_idx == 5 or gene_idx == 7 or gene_idx == 11 or gene_idx == 12):
+                random_value = (random.uniform(-0.0005, 0.0005))
+            elif(gene_idx == 10):
+                random_value = (random.uniform(-0.05, 0.05))
             else:
-                random_value = round(random.uniform(-0.5, 0.5), 2)
-            offspring_crossover[idx, gene_idx] = offspring_crossover[idx, gene_idx] + random_value
+                random_value = (random.uniform(-0.50, 0.50))
+            if(abs(random_value) < (0.1*offspring_crossover[idx, gene_idx])):
+                offspring_crossover[idx, gene_idx] = ((offspring_crossover[idx, gene_idx] + random_value))
+            else:
+                offspring_crossover[idx, gene_idx] = ((offspring_crossover[idx, gene_idx] + (0.5*random_value)))
             #gene_idx = gene_idx + mutations_counter
     return offspring_crossover
 '''
@@ -200,4 +204,28 @@ def mutation(offspring_crossover, num_mutations=1):
         offspring_crossover[idx, 4] = offspring_crossover[idx, 4] + random_value
 
     return offspring_crossover
+
+
+def validation(var, cuts, tree_sig, tree_bkg, param_abs):
+    
+    #calculating the efficiency of cuts
+    denom_sig = tree_sig.Count();
+    denom_bkg = tree_bkg.Count();
+    entries_sig = tree_sig.Filter('%s > %s'%(var[0],cuts[0]))
+    entries_bkg = tree_bkg.Filter('%s > %s'%(var[0],cuts[0]))
+    for i in range(1,len(var)-param_abs):
+        entries_sig = entries_sig.Filter('%s > %s'%(var[i],cuts[i]))
+        entries_bkg = entries_bkg.Filter('%s > %s'%(var[i],cuts[i]))
+    for k in range(param_abs):
+        entries_sig = entries_sig.Filter('%s < %s'%(var[k+i+1],cuts[j,k+i+1]))
+        entries_bkg = entries_bkg.Filter('%s < %s'%(var[k+i+1],cuts[j,k+i+1]))
+    sig_ent = entries_sig.Count();
+    bkg_ent = entries_bkg.Count();
+    sig = sig_ent.GetValue()
+    bkg = bkg_ent.GetValue()
+
+    eff_sig = sig/(denom_sig.GetValue())
+    eff_bkg = bkg/(denom_bkg.GetValue())
+    
+    return eff_sig, eff_bkg
 '''
